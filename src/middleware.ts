@@ -3,12 +3,12 @@ import { DEFAULT_LOCALE, isLocale } from "@/lib/i18n/config";
 
 /**
  * Locale middleware:
+ *  - `/` goes straight into the app in the visitor's language (remembered
+ *    cookie, default English) — no language-picker screen,
  *  - keeps every app page under a /en or /hi prefix so links stay shareable,
  *  - forwards the active locale to the server tree via a request header so
  *    <html lang> is correct on the very first request,
  *  - persists the choice in a cookie (used outside the locale routes).
- *
- * `/` is the bilingual landing page and is left untouched.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -30,8 +30,9 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname === "/") {
-    // Bilingual landing page lives at app/page.tsx.
-    return passThrough(request, cookieLocale(request) ?? DEFAULT_LOCALE);
+    // No language-picker landing page: enter the app directly.
+    const locale = cookieLocale(request) ?? DEFAULT_LOCALE;
+    return NextResponse.redirect(new URL(`/${locale}`, request.url));
   }
 
   // Unknown top-level segment: treat it as an app path missing its locale.

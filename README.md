@@ -14,9 +14,10 @@ Built with **Next.js (App Router) + TypeScript**, **Tailwind CSS**,
 ## Features
 
 - **Language sections** — English and Hindi, with a persistent, visible
-  language switch. Every category name and interface label exists in both
-  languages (`en` / `hi` in the URL, `lang` on the document, Devanagari web
-  font included).
+  language switch in the header. The app opens directly in the site language
+  (no language-picker screen); every category name and interface label exists
+  in both languages (`en` / `hi` in the URL, `lang` on the document,
+  Devanagari web font included).
 - **Song categories** — Worship (आराधना), Prayer Songs (प्रार्थना गीत), Easter
   (ईस्टर), Good Friday (गुड फ्राइडे), Palm Sunday (पाम संडे), Christmas Songs
   (क्रिसमस गीत), Bible Passage-Related Songs (बाइबल पद से जुड़े गीत), Others
@@ -336,7 +337,7 @@ admins manage everything.
 │   ├── app/
 │   │   ├── api/                # REST handlers (auth, songs, categories, review)
 │   │   ├── [locale]/           # /en/... and /hi/... pages
-│   │   ├── page.tsx            # bilingual landing page (/)
+│   │   ├── page.tsx            # / → straight into the app (no language picker)
 │   │   ├── layout.tsx          # <html lang>, fonts, toasts
 │   │   └── globals.css
 │   ├── components/

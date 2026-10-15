@@ -20,15 +20,6 @@ export interface Dictionary {
     language: string;
     switchLanguage: string;
   };
-  landing: {
-    heading: string;
-    subheading: string;
-    chooseLanguage: string;
-    english: string;
-    hindi: string;
-    enterEnglish: string;
-    enterHindi: string;
-  };
   home: {
     heroTitle: string;
     heroSubtitle: string;
@@ -153,6 +144,7 @@ export interface Dictionary {
     accessDenied: string;
     accessDeniedDesc: string;
     allSongs: string;
+    addSong: string;
   };
   auth: {
     signInTitle: string;
@@ -220,15 +212,6 @@ const en: Dictionary = {
     signOut: "Sign out",
     language: "Language",
     switchLanguage: "Switch language",
-  },
-  landing: {
-    heading: "WorshipJesusChrist",
-    subheading: "A bilingual Gospel song book — English & हिंदी",
-    chooseLanguage: "Choose your language / अपनी भाषा चुनें",
-    english: "English",
-    hindi: "हिंदी",
-    enterEnglish: "Continue in English",
-    enterHindi: "हिंदी में जारी रखें",
   },
   home: {
     heroTitle: "Sing the Gospel, in English and Hindi",
@@ -355,6 +338,7 @@ const en: Dictionary = {
     accessDenied: "Admins only",
     accessDeniedDesc: "You need an administrator account to view this page.",
     allSongs: "All songs",
+    addSong: "Add a song",
   },
   auth: {
     signInTitle: "Sign in",
@@ -422,15 +406,6 @@ const hi: Dictionary = {
     signOut: "साइन आउट करें",
     language: "भाषा",
     switchLanguage: "भाषा बदलें",
-  },
-  landing: {
-    heading: "WorshipJesusChrist",
-    subheading: "एक द्विभाषी सुसमाचार गीत पुस्तिका — English & हिंदी",
-    chooseLanguage: "Choose your language / अपनी भाषा चुनें",
-    english: "English",
-    hindi: "हिंदी",
-    enterEnglish: "Continue in English",
-    enterHindi: "हिंदी में जारी रखें",
   },
   home: {
     heroTitle: "सुसमाचार के गीत गाएँ — अंग्रेज़ी और हिंदी में",
@@ -557,6 +532,7 @@ const hi: Dictionary = {
     accessDenied: "केवल व्यवस्थापक",
     accessDeniedDesc: "यह पृष्ठ देखने के लिए व्यवस्थापक खाता आवश्यक है।",
     allSongs: "सभी गीत",
+    addSong: "गीत जोड़ें",
   },
   auth: {
     signInTitle: "साइन इन करें",

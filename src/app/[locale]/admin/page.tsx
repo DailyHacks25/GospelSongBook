@@ -6,6 +6,7 @@ import {
   Clock3,
   FolderTree,
   Music2,
+  Plus,
   ShieldAlert,
   XCircle,
 } from "lucide-react";
@@ -72,12 +73,20 @@ export default async function AdminPage({ params }: { params: Promise<{ locale: 
           <h1 className="text-3xl font-semibold tracking-tight">{dict.admin.title}</h1>
           <p className="max-w-2xl text-muted-foreground">{dict.admin.subtitle}</p>
         </div>
-        <Button asChild variant="outline">
-          <Link href={`/${locale}/admin/categories`}>
-            <FolderTree className="h-4 w-4" aria-hidden="true" />
-            {dict.admin.manageCategories}
-          </Link>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild>
+            <Link href={`/${locale}/submit`}>
+              <Plus className="h-4 w-4" aria-hidden="true" />
+              {dict.admin.addSong}
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/${locale}/admin/categories`}>
+              <FolderTree className="h-4 w-4" aria-hidden="true" />
+              {dict.admin.manageCategories}
+            </Link>
+          </Button>
+        </div>
       </header>
 
       <section className="grid grid-cols-2 gap-4 lg:grid-cols-4" aria-label={dict.admin.dashboard}>
