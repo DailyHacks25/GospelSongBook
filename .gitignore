@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+
+# next.js
+.next/
+out/
+next-env.d.ts
+
+# production / build artifacts
+build/
+dist/
+coverage/
+
+# local environment — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# SQLite databases (created locally by the app or seed scripts)
+data/
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# logs
+*.log
+npm-debug.log*
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# test / tooling caches
+.turbo/
+.eslintcache
+tsconfig.tsbuildinfo
