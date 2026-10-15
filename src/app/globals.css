@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Warm, calm palette — cream paper, deep navy ink, muted gold accents. */
+    --background: 40 33% 98%;
+    --foreground: 222 24% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 24% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 24% 12%;
+    --primary: 222 47% 22%;
+    --primary-foreground: 40 33% 98%;
+    --secondary: 40 24% 93%;
+    --secondary-foreground: 222 24% 16%;
+    --muted: 40 20% 93%;
+    --muted-foreground: 222 12% 42%;
+    --accent: 43 45% 90%;
+    --accent-foreground: 222 30% 18%;
+    --destructive: 0 68% 44%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 40 16% 87%;
+    --input: 40 16% 87%;
+    --ring: 222 47% 30%;
+    --radius: 0.625rem;
+    --gold: 43 52% 52%;
+    --gold-foreground: 40 33% 98%;
+  }
+
+  .dark {
+    --background: 222 30% 9%;
+    --foreground: 40 20% 96%;
+    --card: 222 26% 12%;
+    --card-foreground: 40 20% 96%;
+    --popover: 222 26% 12%;
+    --popover-foreground: 40 20% 96%;
+    --primary: 40 33% 92%;
+    --primary-foreground: 222 30% 10%;
+    --secondary: 222 18% 18%;
+    --secondary-foreground: 40 20% 96%;
+    --muted: 222 18% 18%;
+    --muted-foreground: 40 10% 64%;
+    --accent: 43 30% 22%;
+    --accent-foreground: 40 20% 96%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 222 16% 22%;
+    --input: 222 16% 22%;
+    --ring: 43 40% 60%;
+    --gold: 43 52% 58%;
+    --gold-foreground: 222 30% 10%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Devanagari text gets slightly looser tracking for readability. */
+  [lang="hi"],
+  .font-devanagari {
+    letter-spacing: 0.005em;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* Lyrics typography — generous leading, readable measure. */
+  .lyrics {
+    white-space: pre-wrap;
+    line-height: 2;
+    font-size: 1.0625rem;
+  }
+
+  @screen sm {
+    .lyrics {
+      font-size: 1.125rem;
+      line-height: 2.1;
+    }
+  }
+}
