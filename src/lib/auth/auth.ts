@@ -1,28 +1,31 @@
 /**
- * Auth.js (NextAuth v5) configuration.
+ * Auth.js (NextAuth v5) configuration — email + password sign-in.
  *
- * Google sign-in only. Users and roles live in SQLite (see
- * `src/lib/db/queries/users.ts`); the JWT carries the local user id and role
- * so session reads are cheap, and the role is re-synced from the database on
- * every session check so demotions take effect promptly.
+ * Accounts live in SQLite (`users.password_hash` holds a salted scrypt hash).
+ * The JWT carries the local user id and role so session reads are cheap, and
+ * the role is re-synced from the database on every session check so demotions
+ * take effect promptly.
  *
  * Security defaults:
  *   - JWT session strategy (no client-readable session store),
  *   - httpOnly, SameSite=Lax, Secure cookies in production,
  *   - a required AUTH_SECRET in production,
- *   - no credentials provider.
+ *   - scrypt-hashed passwords with constant-time verification,
+ *   - per-account login rate limiting against brute force.
  */
 
 import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
+import Credentials from "next-auth/providers/credentials";
 import type { NextAuthConfig } from "next-auth";
-import { getDb } from "@/lib/db/index";
+import { DUMMY_PASSWORD_HASH, verifyPassword } from "@/lib/auth/password";
 import {
-  getUserByEmail,
-  getUserByGoogleId,
-  getUserById,
-  upsertUserFromGoogle,
-} from "@/lib/db/queries/users";
+  isLoginAllowed,
+  recordLoginFailure,
+  resetLoginFailures,
+} from "@/lib/auth/rate-limit";
+import { credentialsSchema } from "@/lib/validation/auth";
+import { getDb } from "@/lib/db/index";
+import { getUserByEmail, getUserById } from "@/lib/db/queries/users";
 import type { Role } from "@/lib/types";
 
 function assertProductionSecret(): void {
@@ -44,15 +47,43 @@ assertProductionSecret();
 
 export const authConfig: NextAuthConfig = {
   providers: [
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID ?? "",
-      clientSecret: process.env.AUTH_GOOGLE_SECRET ?? "",
-      authorization: {
-        params: {
-          scope: "openid email profile",
-          // Always show the account picker so users can choose the right Google account.
-          prompt: "select_account",
-        },
+    Credentials({
+      id: "credentials",
+      name: "Email and password",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        const parsed = credentialsSchema.safeParse(credentials);
+        if (!parsed.success) return null;
+        const { email, password } = parsed.data;
+
+        if (!isLoginAllowed(email)) return null;
+
+        // Look up the stored hash and verify. On unknown accounts we still
+        // run one hash comparison against a dummy to keep timing flat.
+        const db = getDb();
+        const user = getUserByEmail(db, email);
+        const storedHash = user
+          ? (
+              db
+                .prepare("SELECT password_hash FROM users WHERE id = ?")
+                .get(user.id) as { password_hash: string | null } | undefined
+            )?.password_hash ?? null
+          : null;
+
+        const ok =
+          user && storedHash
+            ? verifyPassword(password, storedHash)
+            : (verifyPassword(password, DUMMY_PASSWORD_HASH), false);
+
+        if (!ok || !user) {
+          recordLoginFailure(email);
+          return null;
+        }
+        resetLoginFailures(email);
+        return { id: user.id, email: user.email, name: user.name, role: user.role };
       },
     }),
   ],
@@ -77,45 +108,25 @@ export const authConfig: NextAuthConfig = {
   },
   trustHost: true,
   callbacks: {
-    async signIn({ user, account, profile }) {
-      if (!account || !profile) return false;
-      const email = (user.email ?? (profile as { email?: string }).email ?? "")
-        .trim()
-        .toLowerCase();
-      if (!email) return false;
-      const googleId =
-        account.providerAccountId ?? user.id ?? (profile as { sub?: string }).sub ?? "";
-      if (!googleId) return false;
-      const db = getDb();
-      upsertUserFromGoogle(db, {
-        googleId,
-        email,
-        name: user.name ?? email,
-        image: user.image ?? null,
-      });
-      return true;
+    async signIn({ user }) {
+      // Credentials authorize() already validated the account.
+      return Boolean(user?.id);
     },
-    async jwt({ token, trigger }) {
+    async jwt({ token, user, trigger }) {
+      if (user) {
+        // Sign-in: anchor the token to the local user row.
+        token.userId = String(user.id);
+        token.role = (user.role as Role | undefined) ?? "user";
+        return token;
+      }
       try {
-        const db = getDb();
-        if (!token.userId) {
-          // First token after sign-in: map the Google identity to the local
-          // user row (email first so the seeded admin placeholder is claimed).
-          const user =
-            (token.email ? getUserByEmail(db, token.email) : null) ??
-            (token.sub ? getUserByGoogleId(db, token.sub) : null);
-          if (user) {
-            token.userId = user.id;
-            token.role = user.role;
-          }
-        } else if (trigger !== "signIn") {
-          // Re-sync role/name on every use (one indexed lookup) so that
-          // admin promotions and demotions apply on the next request.
-          const fresh = getUserById(db, String(token.userId));
+        // Re-sync role/name on every use (one indexed lookup) so that
+        // admin promotions and demotions apply on the next request.
+        if (token.userId) {
+          const fresh = getUserById(getDb(), String(token.userId));
           if (fresh) {
             token.role = fresh.role;
             token.name = fresh.name;
-            token.picture = fresh.image ?? token.picture;
           }
         }
       } catch {
@@ -130,13 +141,6 @@ export const authConfig: NextAuthConfig = {
         session.user.role = (token.role as Role | undefined) ?? "user";
       }
       return session;
-    },
-  },
-  events: {
-    async signIn({ user }) {
-      if (process.env.NODE_ENV !== "production" && user.email) {
-        console.info(`[auth] sign-in: ${user.email}`);
-      }
     },
   },
 };

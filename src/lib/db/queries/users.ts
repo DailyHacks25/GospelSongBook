@@ -1,10 +1,11 @@
 /**
- * Typed user queries over better-sqlite3.
+ * Typed user queries over better-sqlite3 (email + password accounts).
  */
 
 import { randomUUID } from "node:crypto";
 import type { Db } from "@/lib/db/index";
 import { nowIso } from "@/lib/db/queries/common";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import type { Role, User } from "@/lib/types";
 
 interface UserRow {
@@ -14,6 +15,7 @@ interface UserRow {
   name: string;
   image: string | null;
   role: Role;
+  password_hash: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -43,107 +45,92 @@ export function getUserByEmail(db: Db, email: string): User | null {
   return row ? mapUser(row) : null;
 }
 
-export function getUserByGoogleId(db: Db, googleId: string): User | null {
-  const row = db.prepare("SELECT * FROM users WHERE google_id = ?").get(googleId) as
-    | UserRow
-    | undefined;
-  return row ? mapUser(row) : null;
-}
-
-export interface GoogleProfile {
-  googleId: string;
+export interface CreateUserInput {
   email: string;
-  name: string;
-  image?: string | null;
+  name?: string;
+  password: string;
+  role?: Role;
 }
 
 /**
- * Link a Google sign-in to a local user.
- *
- * Order of resolution:
- *   1. Existing row with the same google_id → refresh profile fields.
- *   2. Existing row with the same email (e.g. the seeded admin placeholder)
- *      → claim it by storing the real google_id; role is preserved, which is
- *      how the seeded ADMIN_GOOGLE_EMAIL account becomes a real admin.
- *   3. Otherwise create a new `user`, or an `admin` when the address equals
- *      ADMIN_GOOGLE_EMAIL (belt-and-braces if seeding was skipped).
+ * Create an email + password account. The legacy `google_id` column is kept
+ * (unique, not-null) and filled with a synthetic `local:` identifier — there
+ * is no Google OAuth in this deployment.
  */
-export function upsertUserFromGoogle(db: Db, profile: GoogleProfile): User {
-  const email = profile.email.trim().toLowerCase();
-  const now = nowIso();
-
-  const byGoogleId = getUserByGoogleId(db, profile.googleId);
-  if (byGoogleId) {
-    db.prepare(
-      /* sql */ `
-        UPDATE users
-        SET email = @email, name = @name, image = @image, updated_at = @now
-        WHERE id = @id
-      `,
-    ).run({
-      id: byGoogleId.id,
-      email,
-      name: profile.name,
-      image: profile.image ?? null,
-      now,
-    });
-    return getUserById(db, byGoogleId.id)!;
-  }
-
-  const byEmail = getUserByEmail(db, email);
-  if (byEmail) {
-    db.prepare(
-      /* sql */ `
-        UPDATE users
-        SET google_id = @googleId, name = @name, image = @image, updated_at = @now
-        WHERE id = @id
-      `,
-    ).run({
-      id: byEmail.id,
-      googleId: profile.googleId,
-      name: profile.name,
-      image: profile.image ?? null,
-      now,
-    });
-    return getUserById(db, byEmail.id)!;
-  }
-
-  const adminEmail = process.env.ADMIN_GOOGLE_EMAIL?.trim().toLowerCase();
-  const role: Role = adminEmail && adminEmail === email ? "admin" : "user";
+export function createUserWithPassword(db: Db, input: CreateUserInput): User {
+  const email = input.email.trim().toLowerCase();
   const id = randomUUID();
+  const now = nowIso();
   db.prepare(
     /* sql */ `
-      INSERT INTO users (id, google_id, email, name, image, role, created_at, updated_at)
-      VALUES (@id, @googleId, @email, @name, @image, @role, @now, @now)
+      INSERT INTO users (id, google_id, email, name, image, role, password_hash, created_at, updated_at)
+      VALUES (@id, @googleId, @email, @name, NULL, @role, @passwordHash, @now, @now)
     `,
   ).run({
     id,
-    googleId: profile.googleId,
+    googleId: `local:${id}`,
     email,
-    name: profile.name,
-    image: profile.image ?? null,
-    role,
+    name: input.name?.trim() || email,
+    role: input.role ?? "user",
+    passwordHash: hashPassword(input.password),
     now,
   });
   return getUserById(db, id)!;
 }
 
-/** Promote or demote an account (seed scripts + first-boot hardening). */
+/**
+ * Verify an email + password pair. Returns the user on success, null on any
+ * failure (unknown email or wrong password). Timing is equalized by the
+ * caller (see authenticateUser) via the dummy hash.
+ */
+export function verifyUserPassword(db: Db, email: string, password: string): User | null {
+  const user = getUserByEmail(db, email);
+  if (!user) return null;
+  const row = db
+    .prepare("SELECT password_hash FROM users WHERE id = ?")
+    .get(user.id) as { password_hash: string | null } | undefined;
+  if (!row?.password_hash) return null;
+  if (!verifyPassword(password, row.password_hash)) return null;
+  return user;
+}
+
+export function setUserPassword(db: Db, email: string, password: string): User | null {
+  const user = getUserByEmail(db, email);
+  if (!user) return null;
+  db.prepare("UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?").run(
+    hashPassword(password),
+    nowIso(),
+    user.id,
+  );
+  return user;
+}
+
+/**
+ * Create an account if the email is unknown; otherwise update name/role and
+ * (when a password is given) rotate the password. Used by the admin seed and
+ * the management scripts.
+ */
+export function upsertUserWithPassword(
+  db: Db,
+  input: CreateUserInput & { role: Role },
+): { user: User; created: boolean } {
+  const existing = getUserByEmail(db, input.email);
+  if (!existing) {
+    return { user: createUserWithPassword(db, input), created: true };
+  }
+  const now = nowIso();
+  db.prepare(
+    "UPDATE users SET name = COALESCE(NULLIF(@name, ''), name), role = @role, updated_at = @now WHERE id = @id",
+  ).run({ id: existing.id, name: input.name ?? "", role: input.role, now });
+  if (input.password) setUserPassword(db, input.email, input.password);
+  return { user: getUserById(db, existing.id)!, created: false };
+}
+
+/** Promote or demote an existing account. */
 export function setUserRole(db: Db, email: string, role: Role): User | null {
   const normalized = email.trim().toLowerCase();
   const existing = getUserByEmail(db, normalized);
-  const now = nowIso();
-  if (existing) {
-    db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(role, now, existing.id);
-    return getUserById(db, existing.id);
-  }
-  // Create a placeholder row so the role is reserved before first sign-in.
-  const id = randomUUID();
-  db.prepare(
-    /* sql */ `
-      INSERT INTO users (id, google_id, email, name, image, role, created_at, updated_at)
-      VALUES (@id, @googleId, @email, @name, NULL, @role, @now, @now)
-    `,
-  ).run({ id, googleId: `seed:${normalized}`, email: normalized, name: normalized, role, now });
-  return getUserById(db, id);
+  if (!existing) return null;
+  db.prepare("UPDATE users SET role = ?, updated_at = ? WHERE id = ?").run(role, nowIso(), existing.id);
+  return getUserById(db, existing.id);
 }

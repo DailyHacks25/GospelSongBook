@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { SignInButton } from "@/components/auth/sign-in-button";
+import { SignInForm } from "@/components/auth/sign-in-form";
 import { getPageContext } from "@/lib/i18n/server";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +42,16 @@ export default async function SignInPage({
           <CardDescription>{dict.auth.signInSubtitle}</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <SignInButton label={dict.auth.signInWithGoogle} callbackUrl={safeCallback} />
+          <SignInForm
+            emailLabel={dict.auth.email}
+            passwordLabel={dict.auth.password}
+            submitLabel={dict.auth.signInAction}
+            signingInLabel={dict.auth.signingIn}
+            invalidCredentialsLabel={dict.auth.invalidCredentials}
+            genericErrorLabel={dict.errors.generic}
+            emailPlaceholder="admin@example.com"
+            callbackUrl={safeCallback}
+          />
           <p className="text-center text-xs text-muted-foreground">{dict.auth.securityNote}</p>
         </CardContent>
       </Card>

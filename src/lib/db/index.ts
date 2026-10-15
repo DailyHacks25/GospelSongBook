@@ -11,8 +11,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
-import { DDL, SCHEMA_VERSION } from "@/lib/db/schema";
-import { seedCategories, seedAdminPlaceholder } from "@/lib/db/seed";
+import { DDL } from "@/lib/db/schema";
+import { seedCategories, seedAdminAccount } from "@/lib/db/seed";
 
 export type Db = Database.Database;
 
@@ -30,13 +30,22 @@ export function resolveDatabasePath(): string {
 /** Apply schema + seed data to any connection (also used by tests with :memory:). */
 export function initializeDatabase(db: Db): void {
   db.exec("PRAGMA foreign_keys = ON;");
-  const version = db.pragma("user_version", { simple: true }) as number;
-  if (version < SCHEMA_VERSION) {
+  let version = db.pragma("user_version", { simple: true }) as number;
+  if (version < 1) {
     db.exec(DDL);
-    db.pragma(`user_version = ${SCHEMA_VERSION}`);
+    db.pragma("user_version = 1");
+    version = 1;
+  }
+  if (version < 2) {
+    // v2: password_hash for email+password sign-in.
+    const columns = db.prepare("PRAGMA table_info(users)").all() as { name: string }[];
+    if (!columns.some((column) => column.name === "password_hash")) {
+      db.exec("ALTER TABLE users ADD COLUMN password_hash TEXT;");
+    }
+    db.pragma("user_version = 2");
   }
   seedCategories(db);
-  seedAdminPlaceholder(db);
+  seedAdminAccount(db);
 }
 
 let instance: Db | null = null;

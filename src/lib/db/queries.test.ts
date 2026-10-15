@@ -1,8 +1,8 @@
 import Database from "better-sqlite3";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { initializeDatabase, type Db } from "@/lib/db/index";
-import { SEED_CATEGORIES } from "@/lib/db/schema";
-import { seedAdminPlaceholder, seedCategories } from "@/lib/db/seed";
+import { SEED_CATEGORIES, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@/lib/db/schema";
+import { seedAdminAccount, seedCategories } from "@/lib/db/seed";
 import {
   countSongsInCategory,
   createCategory,
@@ -23,34 +23,42 @@ import {
   updateSongStatus,
 } from "@/lib/db/queries/songs";
 import {
+  createUserWithPassword,
   getUserByEmail,
-  getUserByGoogleId,
+  setUserPassword,
   setUserRole,
-  upsertUserFromGoogle,
+  upsertUserWithPassword,
+  verifyUserPassword,
 } from "@/lib/db/queries/users";
 
-const ORIGINAL_ADMIN_EMAIL = process.env.ADMIN_GOOGLE_EMAIL;
+const ORIGINAL_ENV = {
+  ADMIN_EMAIL: process.env.ADMIN_EMAIL,
+  ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+};
 
 let db: Db;
 
 beforeEach(() => {
-  process.env.ADMIN_GOOGLE_EMAIL = "admin@example.com";
+  process.env.ADMIN_EMAIL = "admin@example.com";
+  process.env.ADMIN_PASSWORD = "admin123";
   db = new Database(":memory:");
   initializeDatabase(db);
 });
 
 afterEach(() => {
   db.close();
-  if (ORIGINAL_ADMIN_EMAIL === undefined) delete process.env.ADMIN_GOOGLE_EMAIL;
-  else process.env.ADMIN_GOOGLE_EMAIL = ORIGINAL_ADMIN_EMAIL;
+  for (const [key, value] of Object.entries(ORIGINAL_ENV)) {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
 });
 
 function makeAuthor(email = "author@example.com") {
-  return upsertUserFromGoogle(db, {
-    googleId: `g-${email}`,
+  return createUserWithPassword(db, {
     email,
     name: "Song Author",
-    image: null,
+    password: "authorpass1",
+    role: "user",
   });
 }
 
@@ -87,69 +95,91 @@ describe("database schema and seeding", () => {
     expect(listCategories(db)).toHaveLength(SEED_CATEGORIES.length);
   });
 
-  it("creates the admin placeholder from ADMIN_GOOGLE_EMAIL", () => {
+  it("creates the default admin account with a working password", () => {
     const admin = getUserByEmail(db, "admin@example.com");
     expect(admin).not.toBeNull();
     expect(admin!.role).toBe("admin");
-    expect(admin!.googleId).toBe("seed:admin@example.com");
-    // Running again does not duplicate.
-    expect(seedAdminPlaceholder(db)).toBe(false);
-    expect(getUserByEmail(db, "admin@example.com")).not.toBeNull();
+    expect(verifyUserPassword(db, "admin@example.com", "admin123")).not.toBeNull();
+    expect(verifyUserPassword(db, "admin@example.com", "wrong")).toBeNull();
+    // Running again does not duplicate or break the password.
+    expect(seedAdminAccount(db).created).toBe(false);
+    expect(verifyUserPassword(db, "admin@example.com", "admin123")).not.toBeNull();
   });
 
-  it("skips the admin placeholder without ADMIN_GOOGLE_EMAIL", () => {
-    delete process.env.ADMIN_GOOGLE_EMAIL;
+  it("uses the documented default admin when no env is set", () => {
+    delete process.env.ADMIN_EMAIL;
+    delete process.env.ADMIN_PASSWORD;
     const fresh = new Database(":memory:") as Db;
     initializeDatabase(fresh);
-    const row = fresh.prepare("SELECT COUNT(*) AS n FROM users").get() as { n: number };
-    expect(row.n).toBe(0);
+    const admin = getUserByEmail(fresh, DEFAULT_ADMIN_EMAIL);
+    expect(admin?.role).toBe("admin");
+    expect(verifyUserPassword(fresh, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD)).not.toBeNull();
     fresh.close();
+  });
+
+  it("does not overwrite an existing custom password on re-seed", () => {
+    setUserPassword(db, "admin@example.com", "RotatedPass1");
+    seedAdminAccount(db);
+    expect(verifyUserPassword(db, "admin@example.com", "admin123")).toBeNull();
+    expect(verifyUserPassword(db, "admin@example.com", "RotatedPass1")).not.toBeNull();
   });
 });
 
-describe("user queries", () => {
-  it("links a Google account to the seeded admin by email", () => {
-    const user = upsertUserFromGoogle(db, {
-      googleId: "real-google-sub",
-      email: "Admin@Example.com",
-      name: "Real Admin",
-      image: "https://example.com/pic.png",
-    });
-    expect(user.role).toBe("admin");
-    expect(user.googleId).toBe("real-google-sub");
-    expect(user.email).toBe("admin@example.com");
-    expect(getUserByGoogleId(db, "real-google-sub")!.id).toBe(user.id);
-  });
-
-  it("creates ordinary users with the user role", () => {
-    const user = upsertUserFromGoogle(db, {
-      googleId: "g-2",
-      email: "someone@example.com",
+describe("user account queries", () => {
+  it("creates accounts and verifies passwords", () => {
+    const user = createUserWithPassword(db, {
+      email: "Someone@Example.com",
       name: "Someone",
+      password: "hunter2hunter2",
+      role: "user",
     });
+    expect(user.email).toBe("someone@example.com");
     expect(user.role).toBe("user");
+    expect(verifyUserPassword(db, "someone@example.com", "hunter2hunter2")).not.toBeNull();
+    expect(verifyUserPassword(db, "someone@example.com", "nope")).toBeNull();
+    expect(verifyUserPassword(db, "missing@example.com", "hunter2hunter2")).toBeNull();
+    // Password hashes are never exposed on the domain object.
+    expect(user).not.toHaveProperty("passwordHash");
   });
 
-  it("is idempotent for the same Google account", () => {
-    const first = upsertUserFromGoogle(db, {
-      googleId: "g-3",
-      email: "a@example.com",
-      name: "A",
-    });
-    const second = upsertUserFromGoogle(db, {
-      googleId: "g-3",
-      email: "a@example.com",
-      name: "A Renamed",
-    });
-    expect(second.id).toBe(first.id);
-    expect(second.name).toBe("A Renamed");
+  it("rejects duplicate emails", () => {
+    createUserWithPassword(db, { email: "dup@example.com", password: "password1" });
+    expect(() =>
+      createUserWithPassword(db, { email: "dup@example.com", password: "password2" }),
+    ).toThrow();
   });
 
-  it("promotes and demotes accounts, creating placeholders as needed", () => {
-    const promoted = setUserRole(db, "leader@example.com", "admin");
-    expect(promoted!.role).toBe("admin");
-    const demoted = setUserRole(db, "leader@example.com", "user");
-    expect(demoted!.role).toBe("user");
+  it("rotates passwords", () => {
+    createUserWithPassword(db, { email: "rotate@example.com", password: "oldpassword" });
+    setUserPassword(db, "rotate@example.com", "newpassword1");
+    expect(verifyUserPassword(db, "rotate@example.com", "oldpassword")).toBeNull();
+    expect(verifyUserPassword(db, "rotate@example.com", "newpassword1")).not.toBeNull();
+  });
+
+  it("upserts accounts (create then update role/password)", () => {
+    const first = upsertUserWithPassword(db, {
+      email: "up@example.com",
+      password: "firstpass1",
+      role: "user",
+    });
+    expect(first.created).toBe(true);
+    const second = upsertUserWithPassword(db, {
+      email: "up@example.com",
+      password: "secondpass",
+      role: "admin",
+    });
+    expect(second.created).toBe(false);
+    expect(second.user.role).toBe("admin");
+    expect(verifyUserPassword(db, "up@example.com", "firstpass1")).toBeNull();
+    expect(verifyUserPassword(db, "up@example.com", "secondpass")).not.toBeNull();
+  });
+
+  it("promotes and demotes existing accounts only", () => {
+    createUserWithPassword(db, { email: "member@example.com", password: "memberpass1" });
+    expect(setUserRole(db, "member@example.com", "admin")!.role).toBe("admin");
+    expect(setUserRole(db, "member@example.com", "user")!.role).toBe("user");
+    // No account → no silent placeholder.
+    expect(setUserRole(db, "ghost@example.com", "admin")).toBeNull();
   });
 });
 

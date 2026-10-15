@@ -5,18 +5,19 @@
 
 import type { CategorySlug } from "@/lib/types";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export const DDL = /* sql */ `
 CREATE TABLE IF NOT EXISTS users (
-  id          TEXT PRIMARY KEY,
-  google_id   TEXT NOT NULL UNIQUE,
-  email       TEXT NOT NULL UNIQUE,
-  name        TEXT NOT NULL,
-  image       TEXT,
-  role        TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
-  created_at  TEXT NOT NULL,
-  updated_at  TEXT NOT NULL
+  id            TEXT PRIMARY KEY,
+  google_id     TEXT NOT NULL UNIQUE,
+  email         TEXT NOT NULL UNIQUE,
+  name          TEXT NOT NULL,
+  image         TEXT,
+  role          TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('admin', 'user')),
+  password_hash TEXT,
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS categories (
@@ -60,6 +61,10 @@ export interface SeedCategory {
   nameHi: string;
   sortOrder: number;
 }
+
+/** Default admin sign-in — CHANGE THESE IMMEDIATELY (see README). */
+export const DEFAULT_ADMIN_EMAIL = "admin@example.com";
+export const DEFAULT_ADMIN_PASSWORD = "admin123";
 
 /**
  * The eight gospel song categories, with stable IDs and bilingual names.

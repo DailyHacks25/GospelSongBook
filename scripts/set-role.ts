@@ -1,11 +1,11 @@
 /**
- * Promote or demote a Google account's role.
+ * Promote or demote an existing account.
  *
  *   npm run db:promote-admin -- you@example.com
  *   npm run db:demote-admin  -- someone@example.com
  *
- * If the account has not signed in yet, a placeholder row is created and the
- * role is applied when the account is linked at first sign-in (by email).
+ * The account must already exist — create it first with:
+ *   npm run db:create-user -- <email> <password> [admin|user]
  */
 
 import "dotenv/config";
@@ -27,21 +27,14 @@ function main(): void {
     process.exit(1);
   }
 
-  const dbPath = resolveDatabasePath();
-  console.log(`[set-role] database: ${dbPath}`);
+  console.log(`[set-role] database: ${resolveDatabasePath()}`);
   const user = setUserRole(getDb(), email, mode);
-  if (user) {
-    console.log(`[set-role] ${user.email} is now "${user.role}" (id: ${user.id})`);
-    if (mode === "admin") {
-      console.log(
-        "[set-role] That Google account will have admin access next time it signs in.\n" +
-          "[set-role] If ADMIN_GOOGLE_EMAIL points elsewhere, update it so it names your own account.",
-      );
-    }
-  } else {
-    console.error("[set-role] failed to set role");
+  if (!user) {
+    console.error(`[set-role] no account for ${email}. Create one first:`);
+    console.error(`           npm run db:create-user -- ${email} '<password>' ${mode}`);
     process.exit(1);
   }
+  console.log(`[set-role] ${user.email} is now "${user.role}" (id: ${user.id})`);
   closeDb();
 }
 

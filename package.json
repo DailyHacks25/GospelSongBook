@@ -16,6 +16,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:seed": "tsx scripts/seed.ts",
+    "db:create-user": "tsx scripts/create-user.ts",
     "db:promote-admin": "tsx scripts/set-role.ts promote",
     "db:demote-admin": "tsx scripts/set-role.ts demote"
   },

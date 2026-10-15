@@ -1,18 +1,19 @@
 /**
  * Seed script: creates/updates the SQLite database with the eight song
- * categories and (optionally) the default admin placeholder.
+ * categories and the default admin account (email + password).
  *
  *   npm run db:seed
  *
- * Idempotent — safe to run repeatedly.
+ * Idempotent — safe to run repeatedly. Defaults: admin@example.com / admin123
+ * (override with ADMIN_EMAIL / ADMIN_PASSWORD — change these immediately in
+ * any shared deployment).
  */
 
 import "dotenv/config";
 import { closeDb, getDb, resolveDatabasePath } from "../src/lib/db/index";
-import { seedAdminPlaceholder, seedCategories } from "../src/lib/db/seed";
+import { seedAdminAccount, seedCategories } from "../src/lib/db/seed";
 import { SEED_CATEGORIES } from "../src/lib/db/schema";
 import { listCategories } from "../src/lib/db/queries/categories";
-import { getUserByEmail } from "../src/lib/db/queries/users";
 
 function main(): void {
   const dbPath = resolveDatabasePath();
@@ -23,28 +24,17 @@ function main(): void {
   const categories = listCategories(db);
   console.log(`[seed] categories: ${categories.length} (${SEED_CATEGORIES.length} canonical)`);
 
-  const adminEmail = process.env.ADMIN_GOOGLE_EMAIL?.trim().toLowerCase();
-  if (!adminEmail) {
+  const { created, email } = seedAdminAccount(db);
+  if (created) {
+    console.log(`[seed] admin account created: ${email}`);
     console.log(
-      "[seed] ADMIN_GOOGLE_EMAIL is not set — no admin placeholder created.\n" +
-        "       Set ADMIN_GOOGLE_EMAIL in .env, or later run:\n" +
-        "       npm run db:promote-admin -- you@example.com",
+      "[seed] Default password: the value of ADMIN_PASSWORD (default \"admin123\").\n" +
+        "[seed] IMPORTANT: change these credentials immediately:\n" +
+        "       npm run db:create-user -- " + email + " '<new-strong-password>' admin",
     );
   } else {
-    const before = getUserByEmail(db, adminEmail);
-    seedAdminPlaceholder(db);
-    const admin = getUserByEmail(db, adminEmail);
-    if (admin && admin.googleId.startsWith("seed:")) {
-      console.log(`[seed] admin placeholder ready for ${adminEmail}`);
-      console.log(
-        "[seed] IMPORTANT: sign in with that Google account to claim admin access,\n" +
-          "       and change ADMIN_GOOGLE_EMAIL if it is not your own address.",
-      );
-    } else if (admin && !before) {
-      console.log(`[seed] admin placeholder created for ${adminEmail}`);
-    } else if (admin) {
-      console.log(`[seed] admin account ${adminEmail} exists (linked Google id: ${admin.googleId})`);
-    }
+    console.log(`[seed] admin account ready: ${email}`);
+    console.log("[seed] (password left unchanged — rotate it with db:create-user)");
   }
 
   closeDb();

@@ -3,8 +3,8 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { signIn, signOut } from "next-auth/react";
-import { LogOut, Music4, ShieldCheck, User as UserIcon } from "lucide-react";
+import { signOut } from "next-auth/react";
+import { LogIn, LogOut, Music4, ShieldCheck, User as UserIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,16 +30,11 @@ export function UserMenu({ user, locale, dict }: UserMenuProps) {
 
   if (!user) {
     return (
-      <Button
-        size="sm"
-        onClick={() => {
-          setBusy(true);
-          void signIn("google", { callbackUrl: `/${locale}` }).finally(() => setBusy(false));
-        }}
-        disabled={busy}
-      >
-        <UserIcon className="h-4 w-4" />
-        {busy ? dict.auth.signingIn : dict.nav.signIn}
+      <Button asChild size="sm">
+        <Link href={`/${locale}/signin`}>
+          <LogIn className="h-4 w-4" />
+          {dict.nav.signIn}
+        </Link>
       </Button>
     );
   }

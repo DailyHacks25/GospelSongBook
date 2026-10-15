@@ -157,8 +157,11 @@ export interface Dictionary {
   auth: {
     signInTitle: string;
     signInSubtitle: string;
-    signInWithGoogle: string;
+    signInAction: string;
     signingIn: string;
+    email: string;
+    password: string;
+    invalidCredentials: string;
     signOutConfirm: string;
     signedInAs: string;
     securityNote: string;
@@ -240,8 +243,8 @@ const en: Dictionary = {
     viewAllSongs: "View the full song book",
     submitSong: "Submit a song",
     howItWorks: "How it works",
-    stepSignIn: "Sign in with Google",
-    stepSignInDesc: "Use your Google account — no passwords, no new accounts.",
+    stepSignIn: "Sign in to your account",
+    stepSignInDesc: "Use the email and password issued by the site administrator.",
     stepSubmit: "Submit your song",
     stepSubmitDesc: "Add a title, language, category and lyrics. Submissions start as pending.",
     stepReview: "Editor review",
@@ -355,12 +358,15 @@ const en: Dictionary = {
   },
   auth: {
     signInTitle: "Sign in",
-    signInSubtitle: "Use your Google account to submit and manage songs.",
-    signInWithGoogle: "Continue with Google",
+    signInSubtitle: "Sign in with the email and password issued by the site administrator.",
+    signInAction: "Sign in",
     signingIn: "Signing in…",
+    email: "Email",
+    password: "Password",
+    invalidCredentials: "Incorrect email or password. After 5 failed attempts sign-in is locked for 15 minutes.",
     signOutConfirm: "Sign out of WorshipJesusChrist?",
     signedInAs: "Signed in as",
-    securityNote: "We only use your Google name, email and profile picture.",
+    securityNote: "Passwords are stored as salted scrypt hashes. Sessions use secure, httpOnly cookies.",
   },
   errors: {
     generic: "Something went wrong. Please try again.",
@@ -439,8 +445,8 @@ const hi: Dictionary = {
     viewAllSongs: "पूरी गीत पुस्तिका देखें",
     submitSong: "गीत जमा करें",
     howItWorks: "यह कैसे काम करता है",
-    stepSignIn: "Google से साइन इन करें",
-    stepSignInDesc: "अपने Google खाते का उपयोग करें — न कोई पासवर्ड, न कोई नया खाता।",
+    stepSignIn: "अपने खाते से साइन इन करें",
+    stepSignInDesc: "साइट व्यवस्थापक द्वारा दिए गए ईमेल और पासवर्ड का उपयोग करें।",
     stepSubmit: "अपना गीत जमा करें",
     stepSubmitDesc: "शीर्षक, भाषा, श्रेणी और बोल जोड़ें। जमा किए गए गीत 'लंबित' रहते हैं।",
     stepReview: "संपादक समीक्षा",
@@ -554,12 +560,15 @@ const hi: Dictionary = {
   },
   auth: {
     signInTitle: "साइन इन करें",
-    signInSubtitle: "गीत जमा करने और प्रबंधित करने के लिए अपने Google खाते का उपयोग करें।",
-    signInWithGoogle: "Google से जारी रखें",
+    signInSubtitle: "साइट व्यवस्थापक द्वारा दिए गए ईमेल और पासवर्ड से साइन इन करें।",
+    signInAction: "साइन इन करें",
     signingIn: "साइन इन हो रहा है…",
+    email: "ईमेल",
+    password: "पासवर्ड",
+    invalidCredentials: "ईमेल या पासवर्ड गलत है। 5 असफल प्रयासों के बाद 15 मिनट के लिए साइन इन बंद हो जाता है।",
     signOutConfirm: "WorshipJesusChrist से साइन आउट करें?",
     signedInAs: "साइन इन उपयोगकर्ता",
-    securityNote: "हम केवल आपका Google नाम, ईमेल और प्रोफ़ाइल चित्र उपयोग करते हैं।",
+    securityNote: "पासवर्ड साल्टेड scrypt हैश के रूप में संग्रहीत होते हैं। सत्र सुरक्षित, httpOnly कुकीज़ का उपयोग करते हैं।",
   },
   errors: {
     generic: "कुछ गलत हो गया। कृपया पुनः प्रयास करें।",

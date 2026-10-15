@@ -1,13 +1,13 @@
 # WorshipJesusChrist
 
 A bilingual (**English & हिंदी**) Gospel song book. Browse worship, prayer and
-seasonal songs by category, search the lyrics, sign in with Google to submit
-songs, and let admins curate what is published — with calm, light-filled
-background photography from Unsplash.
+seasonal songs by category, search the lyrics, sign in to submit songs, and
+let admins curate what is published — with calm, light-filled background
+photography from Unsplash.
 
 Built with **Next.js (App Router) + TypeScript**, **Tailwind CSS**,
 **shadcn/ui**-style components, **SQLite via `better-sqlite3`** (no ORM),
-**Auth.js (NextAuth v5) Google sign-in**, and the **Unsplash API**.
+**Auth.js (NextAuth v5) email + password sign-in**, and the **Unsplash API**.
 
 ---
 
@@ -30,9 +30,10 @@ Built with **Next.js (App Router) + TypeScript**, **Tailwind CSS**,
   in-memory + per-song caching to respect rate limits, photographer
   attribution per the Unsplash API guidelines, and a built-in gradient
   fallback.
-- **Authentication & roles** — Google sign-in (Auth.js/NextAuth v5, JWT
-  sessions, secure cookies). Users and roles live in SQLite; roles are
-  `admin` and `user`.
+- **Authentication & roles** — email + password sign-in (Auth.js/NextAuth v5,
+  JWT sessions, secure cookies, scrypt-hashed passwords, login rate limiting).
+  Users and roles live in SQLite; roles are `admin` and `user`. A default
+  admin account is seeded so you can sign in immediately.
 - **Moderated submissions** — signed-in users submit songs that start as
   `pending` and stay hidden until an admin approves them. Approved songs
   appear in the song book immediately. Admins can approve/reject, edit or
@@ -45,9 +46,8 @@ Built with **Next.js (App Router) + TypeScript**, **Tailwind CSS**,
 - **Node.js ≥ 22** (`better-sqlite3` v13 requires it; matches Vercel's Node 22
   runtime)
 - npm 10+
-- A Google OAuth client (for sign-in) and an Unsplash access key (for
-  backgrounds) — see below. The app runs without Unsplash (fallback gradient),
-  but sign-in needs the Google credentials.
+- An Unsplash access key (optional but recommended — without it the app uses
+  the built-in gradient backgrounds)
 
 ---
 
@@ -62,17 +62,20 @@ npm install
 # 2. Configure environment
 cp .env.example .env.local
 #    then edit .env.local — at minimum set:
-#      AUTH_SECRET            (generate: npx auth secret   or   openssl rand -base64 32)
-#      AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET
-#      ADMIN_GOOGLE_EMAIL     (your Google address — see "Default admin" below)
-#      UNSPLASH_ACCESS_KEY    (optional but recommended)
+#      AUTH_SECRET         (generate: npx auth secret   or   openssl rand -base64 32)
+#      ADMIN_EMAIL / ADMIN_PASSWORD   (your admin sign-in — CHANGE the defaults)
+#      UNSPLASH_ACCESS_KEY (optional but recommended)
 
-# 3. Create and seed the database (categories + admin placeholder)
+# 3. Create and seed the database (categories + default admin account)
 npm run db:seed
 
 # 4. Run
 npm run dev            # http://localhost:3000
 ```
+
+**Default admin sign-in:** `admin@example.com` / `admin123` (override with
+`ADMIN_EMAIL` / `ADMIN_PASSWORD`). Change these immediately — see
+“Default admin & roles” below.
 
 Other commands:
 
@@ -82,6 +85,8 @@ npm run lint           # eslint (next/core-web-vitals)
 npm test               # vitest unit tests
 npm run build          # production build
 npm start              # serve the production build
+npm run db:create-user -- user@example.com 'StrongPass1'         # create a member account
+npm run db:create-user -- admin@example.com 'NewPass123' admin   # rotate the admin password
 npm run db:promote-admin -- you@example.com    # grant admin
 npm run db:demote-admin  -- someone@example.com # revoke admin
 ```
@@ -100,22 +105,18 @@ See [`.env.example`](.env.example) for the full annotated list.
 | --- | --- | --- |
 | `DATABASE_PATH` | no | SQLite file location. Default `./data/app.db` locally, `/tmp/worshipjesuschrist.db` on Vercel. |
 | `AUTH_SECRET` | **yes** | Signs JWTs and cookies. Generate with `npx auth secret` or `openssl rand -base64 32`. |
-| `AUTH_GOOGLE_ID` | **yes** | Google OAuth client ID. |
-| `AUTH_GOOGLE_SECRET` | **yes** | Google OAuth client secret. |
 | `AUTH_URL` | recommended | Public base URL, e.g. `https://your-app.vercel.app`. |
-| `ADMIN_GOOGLE_EMAIL` | recommended | Google account that receives admin (seeded as a placeholder; claimed at first sign-in). **Change this immediately.** |
+| `ADMIN_EMAIL` | no | Default admin sign-in email (default `admin@example.com`). |
+| `ADMIN_PASSWORD` | no | Default admin password (default `admin123`). **Change immediately.** |
 | `UNSPLASH_ACCESS_KEY` | recommended | Unsplash API access key. Without it the app uses the built-in gradient backgrounds. |
 | `UNSPLASH_CACHE_TTL_SECONDS` | no | In-memory Unsplash cache TTL (default `1800`). |
 
-### Google OAuth setup
+### Sign-in
 
-1. Open the [Google Cloud Console](https://console.cloud.google.com/) →
-   **APIs & Services → Credentials → Create credentials → OAuth client ID**
-   (type: *Web application*).
-2. Add **Authorised redirect URIs**:
-   - local: `http://localhost:3000/api/auth/callback/google`
-   - production: `https://<your-domain>/api/auth/callback/google`
-3. Copy the client ID and secret into `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
+Sign-in is **email + password** (no OAuth setup needed). Accounts live in the
+`users` table as salted scrypt hashes. The seed creates the default admin
+account from `ADMIN_EMAIL` / `ADMIN_PASSWORD`; create member accounts with
+`npm run db:create-user`.
 
 ### Unsplash setup
 
@@ -127,29 +128,37 @@ See [`.env.example`](.env.example) for the full annotated list.
 
 ## Default admin & roles
 
-There are no passwords anywhere. Access is defined by which **Google account**
-you sign in with:
+There are no passwords stored in plain text — accounts use salted scrypt
+hashes — but the app ships with a **known default admin** so you can sign in
+immediately:
 
-1. Set `ADMIN_GOOGLE_EMAIL` to your own Google address (do this **before**
-   deploying publicly).
-2. `npm run db:seed` (or first boot) creates that address as an **admin
-   placeholder** row in SQLite.
-3. The first time you sign in with that Google account, it is linked to the
-   placeholder and you have the admin role — immediately.
+```
+Email:    admin@example.com      (ADMIN_EMAIL)
+Password: admin123               (ADMIN_PASSWORD)
+```
 
 **Change access immediately after setup:**
 
 ```bash
-# Promote another Google account to admin (works even before its first sign-in)
-npm run db:promote-admin -- new-admin@example.com
+# Rotate the admin password (also updates role — the one-stop command)
+npm run db:create-user -- admin@example.com '<new-strong-password>' admin
+
+# Create a member account (role: user) — members can submit songs
+npm run db:create-user -- member@example.com '<strong-password>'
+
+# Promote an existing member to admin
+npm run db:promote-admin -- member@example.com
 
 # Revoke someone's admin role (demotes to a regular user)
-npm run db:demote-admin -- old-admin@example.com
+npm run db:demote-admin -- someone@example.com
 ```
 
-Then update `ADMIN_GOOGLE_EMAIL` to your own address (or unset it once you
-have promoted yourself via the script). Roles are re-read from the database on
+Then update `ADMIN_EMAIL` / `ADMIN_PASSWORD` in your environment to match
+(or leave them — they only create the account if it does not exist yet; they
+never overwrite a rotated password). Roles are re-read from the database on
 every request, so demotions apply on the next page load.
+
+Sign-in is rate-limited per account (5 failed attempts → 15-minute lockout).
 
 ---
 
@@ -199,18 +208,17 @@ git push -u origin main
    | Variable | Value |
    | --- | --- |
    | `AUTH_SECRET` | `openssl rand -base64 32` output |
-   | `AUTH_GOOGLE_ID` | Google OAuth client ID |
-   | `AUTH_GOOGLE_SECRET` | Google OAuth client secret |
    | `AUTH_URL` | `https://<your-project>.vercel.app` |
-   | `ADMIN_GOOGLE_EMAIL` | your Google address |
+   | `ADMIN_EMAIL` | your admin email (change from the default) |
+   | `ADMIN_PASSWORD` | your admin password (change from `admin123`) |
    | `UNSPLASH_ACCESS_KEY` | Unsplash access key |
    | `DATABASE_PATH` | `/tmp/worshipjesuschrist.db` (optional — this is the default on Vercel) |
 
 3. Deploy. On first boot the app creates the database in `/tmp`, applies the
-   schema and seeds the eight categories and the admin placeholder.
-4. In Google Cloud Console, add the production redirect URI
-   `https://<your-project>.vercel.app/api/auth/callback/google`.
-5. Sign in with the `ADMIN_GOOGLE_EMAIL` Google account — you are the admin.
+   schema and seeds the eight categories plus the admin account.
+4. Sign in at `/en/signin` with `ADMIN_EMAIL` / `ADMIN_PASSWORD` — you are
+   the admin. **Rotate the password immediately** with
+   `npm run db:create-user` (or change `ADMIN_PASSWORD` and redeploy).
 
 ---
 
@@ -290,8 +298,9 @@ photographer's profile and the photo page (Unsplash API guidelines).
 ## Data model
 
 ```
-users        id, google_id (unique), email (unique), name, image,
-             role ('admin' | 'user'), created_at, updated_at
+users        id, email (unique), name, image,
+             role ('admin' | 'user'), password_hash (salted scrypt),
+             created_at, updated_at
 
 categories   id, slug (unique), name_en, name_hi, sort_order,
              created_at, updated_at
@@ -320,8 +329,9 @@ admins manage everything.
 
 ```
 ├── scripts/
-│   ├── seed.ts                 # idempotent seed: categories + admin placeholder
-│   └── set-role.ts             # promote/demote a Google account
+│   ├── seed.ts                 # idempotent seed: categories + default admin
+│   ├── create-user.ts          # create/update an account (set/rotate password)
+│   └── set-role.ts             # promote/demote an existing account
 ├── src/
 │   ├── app/
 │   │   ├── api/                # REST handlers (auth, songs, categories, review)
@@ -335,10 +345,10 @@ admins manage everything.
 │   │   ├── songs/              # song cards, form, search, status badge
 │   │   ├── backgrounds/        # Unsplash background + attribution
 │   │   ├── admin/              # review actions, category manager, delete
-│   │   └── auth/               # Google sign-in button
+│   │   └── auth/               # sign-in form (email + password)
 │   ├── lib/
 │   │   ├── db/                 # schema, seed, connection, typed queries
-│   │   ├── auth/               # NextAuth config, RBAC, route guards
+│   │   ├── auth/               # NextAuth config, password hashing, RBAC, guards
 │   │   ├── unsplash/           # client, safety filter, TTL cache, backgrounds
 │   │   ├── validation/         # zod schemas (songs, categories, common)
 │   │   ├── domain/             # song status state machine
@@ -363,10 +373,12 @@ admins manage everything.
   edit/delete/status changes.
 - Mutating requests check the `Origin` header (CSRF defence in depth on top
   of the SameSite cookie).
+- Login is rate-limited per account (5 failures → 15-minute lockout) and
+  passwords are stored as salted scrypt hashes verified in constant time.
 - The sign-in page accepts only same-site relative callback URLs (no open
   redirects).
-- No passwords or OAuth tokens are stored — only the Google account id,
-  email, name and avatar URL.
+- Only the account email, display name and password hash are stored — no
+  third-party identity data or OAuth tokens.
 
 ## License
 

@@ -1,12 +1,15 @@
 /**
  * Idempotent seeding: the eight song categories (upserted on every boot) and
- * the default admin placeholder (only when ADMIN_GOOGLE_EMAIL is configured).
+ * the default admin account (email + password, only when missing).
+ *
+ * Defaults: admin@example.com / admin123 — override with ADMIN_EMAIL and
+ * ADMIN_PASSWORD. CHANGE THESE IMMEDIATELY in any shared deployment.
  */
 
-import { randomUUID } from "node:crypto";
 import type { Db } from "@/lib/db/index";
-import { SEED_CATEGORIES } from "@/lib/db/schema";
+import { SEED_CATEGORIES, DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD } from "@/lib/db/schema";
 import { nowIso } from "@/lib/db/queries/common";
+import { getUserByEmail, upsertUserWithPassword } from "@/lib/db/queries/users";
 
 /**
  * Insert or refresh the canonical categories. Safe to run repeatedly.
@@ -31,32 +34,37 @@ export function seedCategories(db: Db): void {
   run();
 }
 
+export function resolveAdminCredentials(): { email: string; password: string } {
+  return {
+    email: (process.env.ADMIN_EMAIL ?? DEFAULT_ADMIN_EMAIL).trim().toLowerCase(),
+    password: process.env.ADMIN_PASSWORD ?? DEFAULT_ADMIN_PASSWORD,
+  };
+}
+
 /**
- * Create the default admin account placeholder for `ADMIN_GOOGLE_EMAIL`.
- *
- * The row uses a synthetic google_id until the real Google account signs in;
- * at sign-in the account is linked by email (see upsertUserFromGoogle) and
- * the admin role takes effect. No password or credential is ever stored.
+ * Ensure the default admin account exists. The password is only set when the
+ * account is first created (or when it exists without one) — rotating
+ * ADMIN_PASSWORD later does not silently overwrite a custom password;
+ * use `npm run db:create-user` for that.
  */
-export function seedAdminPlaceholder(db: Db): boolean {
-  const email = process.env.ADMIN_GOOGLE_EMAIL?.trim().toLowerCase();
-  if (!email) return false;
-  const existing = db
-    .prepare("SELECT id FROM users WHERE email = ?")
-    .get(email) as { id: string } | undefined;
-  if (existing) return false;
-  const now = nowIso();
-  db.prepare(
-    /* sql */ `
-      INSERT INTO users (id, google_id, email, name, image, role, created_at, updated_at)
-      VALUES (@id, @googleId, @email, @name, NULL, 'admin', @now, @now)
-    `,
-  ).run({
-    id: randomUUID(),
-    googleId: `seed:${email}`,
+export function seedAdminAccount(db: Db): { created: boolean; email: string } {
+  const { email, password } = resolveAdminCredentials();
+  const existing = getUserByEmail(db, email);
+  if (existing && existing.role === "admin") {
+    // Make sure the account can actually sign in (e.g. a placeholder row).
+    const row = db
+      .prepare("SELECT password_hash FROM users WHERE id = ?")
+      .get(existing.id) as { password_hash: string | null } | undefined;
+    if (!row?.password_hash) {
+      upsertUserWithPassword(db, { email, password, role: "admin", name: existing.name });
+    }
+    return { created: false, email };
+  }
+  upsertUserWithPassword(db, {
     email,
+    password,
+    role: "admin",
     name: "Site administrator",
-    now,
   });
-  return true;
+  return { created: !existing, email };
 }
